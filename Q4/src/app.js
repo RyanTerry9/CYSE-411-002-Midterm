@@ -18,7 +18,7 @@ function loadSession() {
 
 
 function renderStatusMessage(containerElement, message) {
-    containerElement.innerHTML = "<p>" + message + "</p>";   // UNSAFE
+    containerElement.textContent = message;
 }
 
 
@@ -36,13 +36,23 @@ function sanitizeSearchQuery(input) {
     //   - Trim leading/trailing whitespace before processing
     //   - Max 40 characters
     //   - Return null if the result is empty after sanitization
-    return input;   // UNSAFE – returns raw input unchanged
+    
+    input = input.trim();
+    if (!input) { 
+        return null;
+    }
+    // removes disallowed characters, limits length, returns null if it's empty
+    input = input.replace(/[^a-zA-Z0-9\s\-_]/g, ''); 
+    if (input.length > 40) {
+        input = input.substring(0, 40);
+    }
+    return input || null;
 }
 
 function performSearch(query) {
     const sanitized = sanitizeSearchQuery(query);
     const label = document.getElementById("search-label");
-    label.innerHTML = "Showing results for: " + sanitized;  // UNSAFE
+    label.textContent = "Showing results for: " + sanitized;
 }
 
 
@@ -54,10 +64,14 @@ function performSearch(query) {
 document.addEventListener("DOMContentLoaded", function () {
 
     // Load session
-    const session = loadSession();
-    if (session) {
-        document.getElementById("welcome-msg").textContent =
-            "Welcome, " + session.displayName;
+    try {
+        const session = loadSession();
+        if (session && typeof session.displayName === "string" && session.displayName.trim() !== "") { // checks for non-empty string name
+            document.getElementById("welcome-msg").textContent =
+                "Welcome, " + session.displayName;
+        }
+    } catch (error) {
+        console.error("Error loading session:", error); 
     }
 
     // Simulate receiving a profile card with a status message

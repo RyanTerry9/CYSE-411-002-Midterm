@@ -19,11 +19,19 @@ let currentFilter = "all";
 //  The stored filter value is used without checking whether
 //  it belongs to the accepted list.
 
-
+// The stored JSON is parsed inside a try/catch. On parse failure, a safe default state object is used instead.
+// The filter field from the stored state is validated to be one of the accepted values ('all', 'low', 'medium', 'high', 'critical') before it is applied to the UI. If the stored value is not in this list, the filter defaults to 'all'.
+// Before writing to localStorage, the filter value read from the DOM input is validated against the same accepted list. Only accepted values are written; invalid values must not be persisted.
 function loadDashboardState() {
     const raw   = localStorage.getItem("dashboardState");
-    const state = JSON.parse(raw);             // No try/catch
-    currentFilter = state.filter;              // No enum validation
+    let state;
+    try { // parses, defaults to safe state if it fails
+        state = JSON.parse(raw);
+    } catch (error) { // 
+        console.error("Error parsing dashboard state:", error);
+        state = { filter: "all" };
+    }
+    currentFilter = state.filter in ACCEPTED_FILTERS ? state.filter : "all"; // checks if it belongs in the list, otherwise defaults to all
     applyFilter(currentFilter);
 }
 
@@ -53,13 +61,19 @@ function saveDashboardState() {
 //  VULNERABILITY 3: No try/catch – a network failure will
 //    crash the function with an unhandled rejection.
 
-
-async function fetchIncidents() {
-    const res  = fetch("/api/incidents");      // Missing await
-    const data = res.json();                   // Missing await; res is a Promise
-    return data;
+try { // try/catch for errors
+    async function fetchIncidents() { // uses await now
+        const res  = await fetch("/api/incidents");      
+        if (!res.ok) { // checks if the response is ok, throws error if not
+            throw new Error('HTTP error: ' + res.status);
+        }
+        const data = await res.json();                   
+        return data;
+    }
+} catch (error) {
+    console.error("Error fetching incidents:", error);
+    return []; // returns empty array
 }
-
 
 
 //  Q5.B  Render Incidents
@@ -73,17 +87,31 @@ async function fetchIncidents() {
 
 function renderIncidents(incidents) {
     const container = document.getElementById("incident-list");
-    container.innerHTML = "";                  // Clear previous results
+    container.textContent = "";                  // Clear previous results
 
-    incidents.forEach(function (incident) {
+    if (!Array.isArray(incidents)) { // renders safe error message if it's not an array
+        const errorMsg = document.createElement("p");
+        errorMsg.textContent = "Error: Invalid incident data.";
+        container.appendChild(errorMsg);
+        console.error("Invalid incidents data:", incidents);
+        return;
+    }
+
+    // validates for a non-empty string title and valid severity field
+    if (incidents.title === undefined || incidents.severity === undefined || typeof incidents.title !== "string" || !ACCEPTED_SEVERITIES.includes(incidents.severity)) {
+        console.warn("Skipping invalid incident:", incidents); // console warning
+        return;
+    }
+
+    incidents.forEach(function (incident) { // no more innerHTML, uses document.createElement
         const item = document.createElement("li");
-        // UNSAFE – directly inserts API response as HTML
-        item.innerHTML =
-            "<strong>" + incident.title + "</strong>" +
-            " <span class='severity severity-" + incident.severity + "'>" +
-            incident.severity + "</span>";
+        item.textContent = incident.title;
+        const severitySpan = document.createElement("span");
+        severitySpan.className = "severity severity-" + incident.severity;
+        severitySpan.textContent = incident.severity;
+        item.appendChild(severitySpan);
         container.appendChild(item);
-    });
+    });    
 }
 
 
